@@ -42,7 +42,6 @@
       60% { transform: scale(1.06); }
       100% { transform: scale(1); }
     }
-    /* カスタムスクロールバー */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #1A1C26; }
     ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
@@ -55,7 +54,7 @@
     const { useState, useEffect, useMemo, useRef } = React;
 
     // ==========================================
-    // 1. Firebase 初期化（直接設定）
+    // 1. Firebase 初期化
     // ==========================================
     const firebaseConfig = {
       apiKey: "AIzaSyAuh7Zpu8598l4AOsz0pcbQ-VijdmObPhE",
@@ -74,7 +73,7 @@
     const db = firebase.firestore();
 
     // ==========================================
-    // 2. スプラトゥーン3 全武器データ（140種以上）
+    // 2. スプラトゥーン3 全武器データ（全173種）
     // ==========================================
     const WEAPON_CATEGORIES = [
       { id: 'shooter', name: 'シューター', color: '#EAFF3D', text: '#111827' },
@@ -94,30 +93,31 @@
       shooter: [
         'ボールドマーカー', 'ボールドマーカーネオ',
         'わかばシューター', 'もみじシューター',
-        'シャープマーカー', 'シャープマーカーネオ',
-        'プロモデラーMG', 'プロモデラーRG',
-        'スプラシューター', 'スプラシューターコラボ', 'ヒーローシューター レプリカ', 'オーダーシューター レプリカ', 'オクタシューター レプリカ',
+        'シャープマーカー', 'シャープマーカーネオ', 'シャープマーカーGECK',
+        'プロモデラーMG', 'プロモデラーRG', 'プロモデラー彩',
+        'スプラシューター', 'スプラシューターコラボ', 'スプラシューター煌',
+        'ヒーローシューター レプリカ', 'オーダーシューター レプリカ', 'オクタシューター レプリカ',
         '.52ガロン', '.52ガロンデコ',
         'N-ZAP85', 'N-ZAP89',
-        'プライムシューター', 'プライムシューターコラボ',
-        '.96ガロン', '.96ガロンデコ',
-        'ジェットスイーパー', 'ジェットスイーパーカスタム',
+        'プライムシューター', 'プライムシューターコラボ', 'プライムシューターFRZN',
+        '.96ガロン', '.96ガロンデコ', '.96ガロン爪',
+        'ジェットスイーパー', 'ジェットスイーパーカスタム', 'ジェットスイーパーCOBR',
         'スペースシューター', 'スペースシューターコラボ',
-        'L3リールガン', 'L3リールガンD',
-        'H3リールガン', 'H3リールガンD',
+        'L3リールガン', 'L3リールガンD', 'L3リールガン箔',
+        'H3リールガン', 'H3リールガンD', 'H3リールガンSNAK',
         'ボトルガイザー', 'ボトルガイザーフォイル'
       ],
       roller: [
-        'カーボンローラー', 'カーボンローラーデコ',
+        'カーボンローラー', 'カーボンローラーデコ', 'カーボンローラーANGL',
         'スプラローラー', 'スプラローラーコラボ', 'オーダーローラー レプリカ',
-        'ダイナモローラー', 'ダイナモローラーテスラ',
+        'ダイナモローラー', 'ダイナモローラーテスラ', 'ダイナモローラー冥',
         'ヴァリアブルローラー', 'ヴァリアブルローラーフォイル',
-        'ワイドローラー', 'ワイドローラーコラボ'
+        'ワイドローラー', 'ワイドローラーコラボ', 'ワイドローラー惑'
       ],
       charger: [
         'スクイックリンα', 'スクイックリンβ',
-        'スプラチャージャー', 'スプラチャージャーコラボ', 'オーダーチャージャー レプリカ',
-        'スプラスコープ', 'スプラスコープコラボ',
+        'スプラチャージャー', 'スプラチャージャーコラボ', 'スプラチャージャーFRST', 'オーダーチャージャー レプリカ',
+        'スプラスコープ', 'スプラスコープコラボ', 'スプラスコープFRST',
         'リッター4K', 'リッター4Kカスタム',
         '4Kスコープ', '4Kスコープカスタム',
         '14式竹筒銃・甲', '14式竹筒銃・乙',
@@ -126,56 +126,56 @@
       ],
       slosher: [
         'バケットスロッシャー', 'バケットスロッシャーデコ', 'オーダースロッシャー レプリカ',
-        'ヒッセン', 'ヒッセン・ヒュー',
+        'ヒッセン', 'ヒッセン・ヒュー', 'ヒッセンASH',
         'スクリュースロッシャー', 'スクリュースロッシャーネオ',
         'オーバーフロッシャー', 'オーバーフロッシャーデコ',
         'エクスプロッシャー', 'エクスプロッシャーカスタム',
-        'モップリン', 'モップリンD'
+        'モップリン', 'モップリンD', 'モップリン角'
       ],
       splatling: [
-        'スプラスピナー', 'スプラスピナーコラボ',
+        'スプラスピナー', 'スプラスピナーコラボ', 'スプラスピナーPYTN',
         'バレルスピナー', 'バレルスピナーデコ', 'オーダースピナー レプリカ',
-        'ハイドラント', 'ハイドラントカスタム',
+        'ハイドラント', 'ハイドラントカスタム', 'ハイドラント圧',
         'クーゲルシュライバー', 'クーゲルシュライバー・ヒュー',
         'ノーチラス47', 'ノーチラス79',
         'イグザミナー', 'イグザミナー・ヒュー'
       ],
       dualie: [
-        'スパッタリー', 'スパッタリー・ヒュー',
-        'スプラマニューバー', 'スプラマニューバーコラボ', 'オーダーマニューバー レプリカ',
+        'スパッタリー', 'スパッタリー・ヒュー', 'スパッタリーOWL',
+        'スプラマニューバー', 'スプラマニューバーコラボ', 'スプラマニューバー耀', 'オーダーマニューバー レプリカ',
         'ケルビン525', 'ケルビン525デコ',
-        'デュアルスイーパー', 'デュアルスイーパーカスタム',
+        'デュアルスイーパー', 'デュアルスイーパーカスタム', 'デュアルスイーパー蹄',
         'クアッドホッパーブラック', 'クアッドホッパーホワイト',
         'ガエンFF', 'ガエンFFカスタム'
       ],
       brella: [
         'パラシェルター', 'パラシェルターソレーラ', 'オーダーシェルター レプリカ',
-        'キャンピングシェルター', 'キャンピングシェルターソレーラ',
-        'スパイガジェット', 'スパイガジェットソレーラ',
+        'キャンピングシェルター', 'キャンピングシェルターソレーラ', 'キャンピングシェルターCREM',
+        'スパイガジェット', 'スパイガジェットソレーラ', 'スパイガジェットWRAN',
         '24式張替傘・甲', '24式張替傘・乙'
       ],
       blaster: [
         'ノヴァブラスター', 'ノヴァブラスターネオ', 'オーダーブラスター レプリカ',
-        'ホットブラスター', 'ホットブラスターカスタム',
+        'ホットブラスター', 'ホットブラスターカスタム', 'ホットブラスター艶',
         'ロングブラスター', 'ロングブラスターカスタム',
         'クラッシュブラスター', 'クラッシュブラスターネオ',
         'ラピッドブラスター', 'ラピッドブラスターデコ',
-        'Rブラスターエリート', 'Rブラスターエリートデコ',
+        'Rブラスターエリート', 'Rブラスターエリートデコ', 'RブラスターエリートWNTR',
         'S-BLAST92', 'S-BLAST91'
       ],
       brush: [
         'パブロ', 'パブロ・ヒュー',
-        'ホクサイ', 'ホクサイ・ヒュー', 'オーダーブラシ レプリカ',
-        'フィンセント', 'フィンセント・ヒュー'
+        'ホクサイ', 'ホクサイ・ヒュー', 'ホクサイ彗', 'オーダーブラシ レプリカ',
+        'フィンセント', 'フィンセント・ヒュー', 'フィンセントBRNZ'
       ],
       stringer: [
-        'トライストリンガー', 'トライストリンガーコラボ', 'オーダーストリンガー レプリカ',
-        'LACT-450', 'LACT-450デコ',
+        'トライストリンガー', 'トライストリンガーコラボ', 'トライストリンガー燈', 'オーダーストリンガー レプリカ',
+        'LACT-450', 'LACT-450デコ', 'LACT-450MILK',
         'フルイドV', 'フルイドVカスタム'
       ],
       splatana: [
-        'ドライブワイパー', 'ドライブワイパーデコ',
-        'ジムワイパー', 'ジムワイパー・ヒュー', 'オーダーワイパー レプリカ',
+        'ドライブワイパー', 'ドライブワイパーデコ', 'ドライブワイパーRUST',
+        'ジムワイパー', 'ジムワイパー・ヒュー', 'ジムワイパー封', 'オーダーワイパー レプリカ',
         'デンタルワイパーミント', 'デンタルワイパースミ'
       ]
     };
@@ -191,10 +191,15 @@
 
     const WEAPON_MAP = Object.fromEntries(ALL_WEAPONS.map((w) => [w.name, w]));
 
+    const BARAZUSHI_SUFFIXES = ['GECK', 'FRZN', 'COBR', 'SNAK', 'ANGL', 'FRST', 'ASH', 'PYTN', 'OWL', 'CREM', 'WRAN', 'WNTR', 'BRNZ', 'MILK', 'RUST'];
+    const SHICHIRIN_SUFFIXES = ['煌', '彩', '爪', '箔', '冥', '惑', '角', '圧', '耀', '蹄', '艶', '彗', '燈', '封'];
+
     // バリエーションバッジ判定
     function getVariantBadge(name) {
       if (name === 'FREE') return { label: 'FREE', bg: '#EAFF3D', text: '#111827' };
       if (name.includes('レプリカ')) return { label: 'REP', bg: '#F8FAFC', text: '#0F172A' };
+      if (BARAZUSHI_SUFFIXES.some((s) => name.endsWith(s))) return { label: 'バラズシ', bg: '#10B981', text: '#FFFFFF' };
+      if (SHICHIRIN_SUFFIXES.some((s) => name.endsWith(s))) return { label: 'シチリン', bg: '#F59E0B', text: '#111827' };
       if (name.includes('コラボ')) return { label: '★コラボ', bg: '#F43F5E', text: '#FFFFFF' };
       if (name.includes('デコ')) return { label: 'Deco', bg: '#EC4899', text: '#FFFFFF' };
       if (name.includes('ネオ')) return { label: 'NEO', bg: '#3B82F6', text: '#FFFFFF' };
@@ -582,22 +587,17 @@
         window.history.replaceState(null, '', window.location.pathname);
       };
 
-      // ==========================================
-      // 画面レンダリング
-      // ==========================================
       const currentBoard = roomData?.boards?.[activePlayerIdx];
       const evalResult = currentBoard ? evaluateBoard(currentBoard.checked, roomData.size) : null;
 
       return (
         <div className="max-w-5xl mx-auto px-3 sm:px-6 py-5">
-          {/* トースト通知 */}
           {toast && (
             <div className="fixed top-4 right-4 z-50 bg-[#FF2D8A] text-white font-bold px-4 py-3 rounded-xl shadow-2xl border-2 border-white/20 ink-pop">
               {toast}
             </div>
           )}
 
-          {/* ヘッダー */}
           <header className="flex flex-wrap items-center justify-between gap-3 mb-6">
             <div className="flex items-center gap-3 cursor-pointer" onClick={leaveRoom}>
               <div className="w-11 h-11 rounded-2xl bg-[#EAFF3D] text-[#12131A] flex items-center justify-center text-2xl shadow-lg shadow-[#EAFF3D]/20">
@@ -632,16 +632,13 @@
             </div>
           )}
 
-          {/* ロビー画面 */}
           {!roomData ? (
             <div className="grid md:grid-cols-2 gap-6">
-              {/* 新規作成カード */}
               <div className="bg-[#1A1C26] border border-gray-800 rounded-2xl p-5 sm:p-6 shadow-xl">
                 <h2 className="text-lg font-black text-[#EAFF3D] mb-4 flex items-center gap-2">
                   <span>＋</span> 新しいルームを作成
                 </h2>
 
-                {/* マス目サイズ */}
                 <div className="mb-4">
                   <label className="block text-xs font-bold text-gray-400 mb-2">マス目サイズ</label>
                   <div className="grid grid-cols-3 gap-2">
@@ -661,7 +658,6 @@
                   </div>
                 </div>
 
-                {/* 参加人数 */}
                 <div className="mb-4">
                   <div className="flex justify-between items-center mb-1">
                     <label className="text-xs font-bold text-gray-400">参加人数（1人＝共有 / 2〜8人＝対戦）</label>
@@ -677,7 +673,6 @@
                   />
                 </div>
 
-                {/* オプション */}
                 <div className="grid grid-cols-2 gap-2 mb-4">
                   <label className="flex items-center gap-2 bg-[#12131A] p-2.5 rounded-xl border border-gray-800 cursor-pointer text-xs font-bold">
                     <input
@@ -708,7 +703,6 @@
                   </label>
                 </div>
 
-                {/* 武器種フィルター */}
                 <div className="mb-5">
                   <div className="flex justify-between items-center mb-2">
                     <label className="text-xs font-bold text-gray-400">
@@ -755,7 +749,6 @@
                 </button>
               </div>
 
-              {/* 既存ルーム参加カード */}
               <div className="bg-[#1A1C26] border border-gray-800 rounded-2xl p-5 sm:p-6 shadow-xl flex flex-col justify-between">
                 <div>
                   <h2 className="text-lg font-black text-[#00E5FF] mb-2 flex items-center gap-2">
@@ -784,9 +777,7 @@
               </div>
             </div>
           ) : (
-            /* ビンゴプレイ画面 */
             <div className="space-y-5">
-              {/* ルーム情報バー */}
               <div className="bg-[#1A1C26] border border-gray-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div>
@@ -822,7 +813,6 @@
                 </div>
               </div>
 
-              {/* プレイヤー切り替えタブ（2人以上のとき） */}
               {roomData.boards.length > 1 && (
                 <div className="flex gap-2 overflow-x-auto pb-1">
                   {roomData.boards.map((b, idx) => {
@@ -851,7 +841,6 @@
                 </div>
               )}
 
-              {/* 現在のボードステータス＆名前編集 */}
               {currentBoard && evalResult && (
                 <div className="bg-[#1A1C26] border border-gray-800 rounded-2xl p-4 sm:p-5">
                   <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -900,7 +889,6 @@
                     </div>
                   </div>
 
-                  {/* ビンゴグリッド */}
                   <div
                     className="grid gap-1.5 sm:gap-2.5"
                     style={{ gridTemplateColumns: `repeat(${roomData.size}, minmax(0, 1fr))` }}
@@ -922,7 +910,6 @@
                               : 'bg-[#12131A] border-gray-800 hover:border-gray-600 text-gray-200'
                           } ${isBingoCell ? 'bingo-glow' : ''}`}
                         >
-                          {/* 亜種バッジ */}
                           <div className="w-full flex justify-between items-start">
                             {badge ? (
                               <span
@@ -939,7 +926,6 @@
                             )}
                           </div>
 
-                          {/* 武器アイコン */}
                           <div className="my-auto">
                             <WeaponIcon
                               category={info?.category}
@@ -949,7 +935,6 @@
                             />
                           </div>
 
-                          {/* 武器名 */}
                           <div
                             className={`w-full font-extrabold leading-tight break-words line-clamp-2 ${
                               roomData.size === 5
