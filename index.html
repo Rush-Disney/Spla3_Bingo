@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>スプラ3 リアルタイム武器ビンゴ</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            splatDark: '#12131A',
+            splatCard: '#1A1C28',
+            splatBorder: '#2E3248',
+            splatYellow: '#EAFF3D',
+            splatPurple: '#603BFF',
+            splatPink: '#FF2E88',
+            splatCyan: '#00F0FF',
+            splatOrange: '#FF7A00',
+            splatGreen: '#00FF66'
+          },
+          fontFamily: {
+            sans: ['"Inter"', '"Hiragino Kaku Gothic ProN"', '"Meiryo"', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <!-- React & ReactDOM (UMD) -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <!-- Babel for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    body {
+      background-color: #12131A;
+      color: #F3F4F6;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* スプラ風ストリート斜め装飾 */
+    .splat-skew {
+      transform: skewX(-6deg);
+    }
+    .splat-skew-reverse {
+      transform: skewX(6deg);
+    }
+    .splat-badge {
+      clip-path: polygon(0% 0%, 95% 0%, 100% 100%, 5% 100%);
+    }
+
+    /* マス目のインク着色アニメーション */
+    @keyframes inkSplat {
+      0% { transform: scale(0.8); opacity: 0.5; }
+      50% { transform: scale(1.08); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .animate-ink {
+      animation: inkSplat 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+
+    /* 完成ラインの発光アニメーション */
+    @keyframes lineGlow {
+      0%, 100% { box-shadow: 0 0 8px #EAFF3D, inset 0 0 6px #EAFF3D; }
+      50% { box-shadow: 0 0 18px #FF2E88, inset 0 0 10px #FF2E88; }
+    }
+    .glow-bingo-line {
+      animation: lineGlow 1.5s infinite alternate;
+      border-color: #EAFF3D !important;
+    }
+
+    /* カスタムスクロールバー */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #12131A;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #2E3248;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #603BFF;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans selection:bg-splatPink selection:text-white">
+  <div id="root"></div>
+
+  <!-- Firebase SDK Modules -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    window.FirebaseSDK = {
+      initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged,
+      getFirestore, doc, setDoc, getDoc, onSnapshot
+    };
+  </script>
+
+  <!-- React Application Code -->
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo } = React;
+
+    // スプラトゥーン3 武器マスターデータ (11カテゴリ 64種)
+    const WEAPON_CATEGORIES = [
+      { id: 'shooter', name: 'シューター', color: '#EAFF3D' },
+      { id: 'roller', name: 'ローラー', color: '#FF2E88' },
+      { id: 'charger', name: 'チャージャー', color: '#00F0FF' },
+      { id: 'slosher', name: 'スロッシャー', color: '#9D00FF' },
+      { id: 'spinner', name: 'スピナー', color: '#00FF66' },
+      { id: 'maneuver', name: 'マニューバー', color: '#FF7A00' },
+      { id: 'shelter', name: 'シェルター', color: '#FF0055' },
+      { id: 'blaster', name: 'ブラスター', color: '#FFCC00' },
+      { id: 'brush', name: 'フデ', color: '#FF33CC' },
+      { id: 'stringer', name: 'ストリンガー', color: '#00CCFF' },
+      { id: 'wiper', name: 'ワイパー', color: '#99FF00' }
+    ];
+
+    const WEAPONS_DATA = [
+      // シューター
+      { name: 'ボールドマーカー', cat: 'shooter' },
+      { name: 'わかばシューター', cat: 'shooter' },
+      { name: 'シャープマーカー', cat: 'shooter' },
+      { name: 'プロモデラーMG', cat: 'shooter' },
+      { name: 'スプラシューター', cat: 'shooter' },
+      { name: '.52ガロン', cat: 'shooter' },
+      { name: 'N-ZAP85', cat: 'shooter' },
+      { name: 'プライムシューター', cat: 'shooter' },
+      { name: '.96ガロン', cat: 'shooter' },
+      { name: 'ジェットスイーパー', cat: 'shooter' },
+      { name: 'スペースシューター', cat: 'shooter' },
+      { name: 'L3リールガン', cat: 'shooter' },
+      { name: 'H3リールガン', cat: 'shooter' },
+      { name: 'ボトルガイザー', cat: 'shooter' },
+      // ローラー
+      { name: 'カーボンローラー', cat: 'roller' },
+      { name: 'スプラローラー', cat: 'roller' },
+      { name: 'ダイナモローラー', cat: 'roller' },
+      { name: 'ヴァリアブルローラー', cat: 'roller' },
+      { name: 'ワイドローラー', cat: 'roller' },
+      // チャージャー
+      { name: 'スクイックリンα', cat: 'charger' },
+      { name: 'スプラチャージャー', cat: 'charger' },
+      { name: 'リッター4K', cat: 'charger' },
+      { name: '14式竹筒銃・甲', cat: 'charger' },
+      { name: 'ソイチューバー', cat: 'charger' },
+      { name: 'R-PEN/5H', cat: 'charger' },
+      // スロッシャー
+      { name: 'バケットスロッシャー', cat: 'slosher' },
+      { name: 'ヒッセン', cat: 'slosher' },
+      { name: 'スクリュースロッシャー', cat: 'slosher' },
+      { name: 'オーバーフロッシャー', cat: 'slosher' },
+      { name: 'エクスプロッシャー', cat: 'slosher' },
+      { name: 'モップリン', cat: 'slosher' },
+      // スピナー
+      { name: 'スプラスピナー', cat: 'spinner' },
+      { name: 'バレルスピナー', cat: 'spinner' },
+      { name: 'ハイドラント', cat: 'spinner' },
+      { name: 'クーゲルシュライバー', cat: 'spinner' },
+      { name: 'ノーチラス47', cat: 'spinner' },
+      { name: 'イグザミナー', cat: 'spinner' },
+      // マニューバー
+      { name: 'スパッタリー', cat: 'maneuver' },
+      { name: 'スプラマニューバー', cat: 'maneuver' },
+      { name: 'ケルビン525', cat: 'maneuver' },
+      { name: 'デュアルスイーパー', cat: 'maneuver' },
+      { name: 'クアッドホッパーブラック', cat: 'maneuver' },
+      { name: 'ガエンFF', cat: 'maneuver' },
+      // シェルター
+      { name: 'パラシェルター', cat: 'shelter' },
+      { name: 'キャンピングシェルター', cat: 'shelter' },
+      { name: 'スパイガジェット', cat: 'shelter' },
+      { name: '24式張替傘・甲', cat: 'shelter' },
+      // ブラスター
+      { name: 'ノヴァブラスター', cat: 'blaster' },
+      { name: 'ホットブラスター', cat: 'blaster' },
+      { name: 'ロングブラスター', cat: 'blaster' },
+      { name: 'クラッシュブラスター', cat: 'blaster' },
+      { name: 'ラピッドブラスター', cat: 'blaster' },
+      { name: 'Rブラスターエリート', cat: 'blaster' },
+      { name: 'S-BLAST92', cat: 'blaster' },
+      // フデ
+      { name: 'パブロ', cat: 'brush' },
+      { name: 'ホクサイ', cat: 'brush' },
+      { name: 'フィンセント', cat: 'brush' },
+      // ストリンガー
+      { name: 'トライストリンガー', cat: 'stringer' },
+      { name: 'LACT-450', cat: 'stringer' },
+      { name: 'フルイドV', cat: 'stringer' },
+      // ワイパー
+      { name: 'ドライブワイパー', cat: 'wiper' },
+      { name: 'ジムワイパー', cat: 'wiper' },
+      { name: 'デンタルワイパーミント', cat: 'wiper' }
+    ];
+
+    // Fisher-Yates シャッフル
+    function shuffleArray(array) {
+      const arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    // 6桁ランダムコード生成
+    function generateRoomCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let code = '';
+      for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return code;
+    }
+
+    // クリップボードコピー
+    function copyToClipboard(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+          document.execCommand('copy');
+        } catch (err) {}
+        document.body.removeChild(textArea);
+        return Promise.resolve();
+      }
+    }
+
+    // メインコンポーネント
+    function App() {
+      const [db, setDb] = useState(null);
+      const [user, setUser] = useState(null);
+      const [appId, setAppId] = useState('spla3-weapon-bingo');
+
+      // アプリの状態
+      const [roomCode, setRoomCode] = useState('');
+      const [roomData, setRoomData] = useState(null);
+      const [activePlayerIndex, setActivePlayerIndex] = useState(0);
+      const [inputRoomCode, setInputRoomCode] = useState('');
+      const [notification, setNotification] = useState('');
+
+      // ルーム作成設定パラメータ
+      const [size, setSize] = useState(5);
+      const [playerCount, setPlayerCount] = useState(1);
+      const [freeCenter, setFreeCenter] = useState(true);
+      const [allowDuplicate, setAllowDuplicate] = useState(true);
+      const [selectedCats, setSelectedCats] = useState(WEAPON_CATEGORIES.map(c => c.id));
+
+      // ローカル/単体動作用状態（Firebase未設定/エラー時のバックアップ）
+      const [isLocalMode, setIsLocalMode] = useState(false);
+
+      // 通知表示
+      const showToast = (msg) => {
+        setNotification(msg);
+        setTimeout(() => setNotification(''), 3000);
+      };
+
+      // Firebase 初期化
+      useEffect(() => {
+        const initFB = async () => {
+          if (!window.FirebaseSDK) {
+            console.log('Firebase SDK Loading fallback...');
+            setIsLocalMode(true);
+            return;
+          }
+          try {
+            const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, getFirestore } = window.FirebaseSDK;
+            const currentAppId = typeof __app_id !== 'undefined' ? __app_id : 'spla3-weapon-bingo-default';
+            setAppId(currentAppId);
+
+            let firebaseConfig = null;
+            if (typeof __firebase_config !== 'undefined') {
+              firebaseConfig = JSON.parse(__firebase_config);
+            }
+
+            if (!firebaseConfig) {
+              console.warn('Firebase config missing. Operating in single-session local mode.');
+              setIsLocalMode(true);
+              return;
+            }
+
+            const app = initializeApp(firebaseConfig);
+            const authObj = getAuth(app);
+            const dbObj = getFirestore(app);
+
+            // Auth Priority
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+              await signInWithCustomToken(authObj, __initial_auth_token);
+            } else {
+              await signInAnonymously(authObj);
+            }
+
+            setUser(authObj.currentUser);
+            setDb(dbObj);
+          } catch (err) {
+            console.error('Firebase init error:', err);
+            setIsLocalMode(true);
+          }
+        };
+
+        // SDK読み込み待ち
+        const checkTimer = setInterval(() => {
+          if (window.FirebaseSDK) {
+            clearInterval(checkTimer);
+            initFB();
+          }
+        }, 100);
+        return () => clearInterval(checkTimer);
+      }, []);
+
+      // URLパラメータのルームコード読み込み
+      useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomFromUrl = urlParams.get('room');
+        if (roomFromUrl) {
+          setInputRoomCode(roomFromUrl.toUpperCase());
+        }
+      }, []);
+
+      // Firestore リアルタイム同期
+      useEffect(() => {
+        if (!db || !roomCode || isLocalMode) return;
+        const { doc, onSnapshot } = window.FirebaseSDK;
+
+        // Path: /artifacts/{appId}/public/data/spla3_bingo_rooms/{roomCode}
+        const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'spla3_bingo_rooms', roomCode);
+
+        const unsubscribe = onSnapshot(
+          roomDocRef,
+          (snapshot) => {
+            if (snapshot.exists()) {
+              const data = snapshot.data();
+              setRoomData(data);
+            } else {
+              showToast('指定されたルームが見つかりません');
+              setRoomCode('');
+              setRoomData(null);
+            }
+          },
+          (error) => {
+            console.error('Firestore listener error:', error);
+            showToast('通信エラーが発生しました。ローカル表示に切替えます。');
+          }
+        );
+
+        return () => unsubscribe();
+      }, [db, roomCode, appId, isLocalMode]);
+
+      // ボード生成ロジック
+      const generateNewRoomData = (newRoomCode) => {
+        const filteredPool = WEAPONS_DATA.filter(w => selectedCats.includes(w.cat));
+
+        if (filteredPool.length < 5) {
+          showToast('選択した武器種が少なすぎます！');
+          return null;
+        }
+
+        const effectiveFree = freeCenter && (size % 2 === 1);
+        const cellsPerBoard = size * size - (effectiveFree ? 1 : 0);
+        const totalNeeded = allowDuplicate ? cellsPerBoard : cellsPerBoard * playerCount;
+
+        if (!allowDuplicate && filteredPool.length < totalNeeded) {
+          showToast(`武器数が足りません！(必要: ${totalNeeded}個, 現在: ${filteredPool.length}個)`);
+          return null;
+        }
+
+        let sharedPool = shuffleArray(filteredPool);
+        let poolIdx = 0;
+
+        const players = [];
+        const center = Math.floor(size / 2);
+
+        for (let p = 0; p < playerCount; p++) {
+          const selectedWeapons = allowDuplicate
+            ? shuffleArray(filteredPool).slice(0, cellsPerBoard)
+            : sharedPool.slice(poolIdx, poolIdx + cellsPerBoard);
+
+          poolIdx += cellsPerBoard;
+
+          const grid = [];
+          const checked = [];
+          let wIdx = 0;
+
+          for (let r = 0; r < size; r++) {
+            const rowW = [];
+            const rowC = [];
+            for (let c = 0; c < size; c++) {
+              if (effectiveFree && r === center && c === center) {
+                rowW.push({ name: 'FREE', cat: 'free' });
+                rowC.push(true);
+              } else {
+                rowW.push(selectedWeapons[wIdx++] || { name: 'スプラシューター', cat: 'shooter' });
+                rowC.push(false);
+              }
+            }
+            grid.push(rowW);
+            checked.push(rowC);
+          }
+
+          players.push({
+            id: `p_${p}`,
+            name: `プレイヤー ${p + 1}`,
+            grid,
+            checked,
+            bingoCount: 0
+          });
+        }
+
+        return {
+          roomCode: newRoomCode,
+          createdAt: Date.now(),
+          settings: { size, playerCount, freeCenter: effectiveFree, allowDuplicate, selectedCats },
+          players
+        };
+      };
+
+      // ルーム新規作成
+      const handleCreateRoom = async () => {
+        const code = generateRoomCode();
+        const data = generateNewRoomData(code);
+        if (!data) return;
+
+        if (db && !isLocalMode) {
+          try {
+            const { doc, setDoc } = window.FirebaseSDK;
+            const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'spla3_bingo_rooms', code);
+            await setDoc(roomDocRef, data);
+          } catch (err) {
+            console.error('Failed to create room on Firestore:', err);
+            setIsLocalMode(true);
+          }
+        }
+
+        setRoomData(data);
+        setRoomCode(code);
+        setActivePlayerIndex(0);
+        showToast(`ルーム [${code}] を作成しました！`);
+      };
+
+      // ルームに参加
+      const handleJoinRoom = async () => {
+        const code = inputRoomCode.trim().toUpperCase();
+        if (!code || code.length !== 6) {
+          showToast('6桁のルームコードを入力してください');
+          return;
+        }
+
+        if (db && !isLocalMode) {
+          try {
+            const { doc, getDoc } = window.FirebaseSDK;
+            const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'spla3_bingo_rooms', code);
+            const snap = await getDoc(roomDocRef);
+            if (snap.exists()) {
+              setRoomData(snap.data());
+              setRoomCode(code);
+              setActivePlayerIndex(0);
+              showToast(`ルーム [${code}] に参加しました！`);
+            } else {
+              showToast('該当するルームが存在しません');
+            }
+          } catch (err) {
+            console.error('Join error:', err);
+            showToast('参加に失敗しました');
+          }
+        } else {
+          showToast('オンライン接続が準備できていません');
+        }
+      };
+
+      // マス目タップ操作
+      const handleCellClick = async (playerIdx, r, c) => {
+        if (!roomData) return;
+        const currentP = roomData.players[playerIdx];
+        if (currentP.grid[r][c].cat === 'free') return; // FREEマスは固定
+
+        // 状態更新
+        const newPlayers = JSON.parse(JSON.stringify(roomData.players));
+        const targetPlayer = newPlayers[playerIdx];
+        const prevChecked = targetPlayer.checked[r][c];
+        targetPlayer.checked[r][c] = !prevChecked;
+
+        // ビンゴ判定と紙吹雪
+        const prevBingoCount = targetPlayer.bingoCount || 0;
+        const { bingoCount } = evaluateBoard(targetPlayer.checked, roomData.settings.size);
+        targetPlayer.bingoCount = bingoCount;
+
+        if (bingoCount > prevBingoCount) {
+          try {
+            confetti({
+              particleCount: 100,
+              spread: 70,
+              origin: { y: 0.6 }
+            });
+          } catch (e) {}
+        }
+
+        const updatedRoom = { ...roomData, players: newPlayers };
+        setRoomData(updatedRoom);
+
+        // Firestore同期
+        if (db && roomCode && !isLocalMode) {
+          try {
+            const { doc, setDoc } = window.FirebaseSDK;
+            const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'spla3_bingo_rooms', roomCode);
+            await setDoc(roomDocRef, updatedRoom);
+          } catch (err) {
+            console.error('Cell update failed:', err);
+          }
+        }
+      };
+
+      // プレイヤー名編集
+      const handleNameChange = async (playerIdx, newName) => {
+        if (!roomData) return;
+        const newPlayers = JSON.parse(JSON.stringify(roomData.players));
+        newPlayers[playerIdx].name = newName;
+        const updatedRoom = { ...roomData, players: newPlayers };
+        setRoomData(updatedRoom);
+
+        if (db && roomCode && !isLocalMode) {
+          try {
+            const { doc, setDoc } = window.FirebaseSDK;
+            const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'spla3_bingo_rooms', roomCode);
+            await setDoc(roomDocRef, updatedRoom);
+          } catch (err) {}
+        }
+      };
+
+      // ボード個別の再シャッフル
+      const handleReshufflePlayer = async (playerIdx) => {
+        if (!roomData) return;
+        const filteredPool = WEAPONS_DATA.filter(w => roomData.settings.selectedCats.includes(w.cat));
+        const size = roomData.settings.size;
+        const effectiveFree = roomData.settings.freeCenter;
+        const cellsPerBoard = size * size - (effectiveFree ? 1 : 0);
+
+        const selectedWeapons = shuffleArray(filteredPool).slice(0, cellsPerBoard);
+        const center = Math.floor(size / 2);
+
+        const newGrid = [];
+        const newChecked = [];
+        let wIdx = 0;
+
+        for (let r = 0; r < size; r++) {
+          const rowW = [];
+          const rowC = [];
+          for (let c = 0; c < size; c++) {
+            if (effectiveFree && r === center && c === center) {
+              rowW.push({ name: 'FREE', cat: 'free' });
+              rowC.push(true);
+            } else {
+              rowW.push(selectedWeapons[wIdx++] || { name: 'スプラシューター', cat: 'shooter' });
+              rowC.push(false);
+            }
+          }
+          newGrid.push(rowW);
+          newChecked.push(rowC);
+        }
+
+        const newPlayers = JSON.parse(JSON.stringify(roomData.players));
+        newPlayers[playerIdx].grid = newGrid;
+        newPlayers[playerIdx].checked = newChecked;
+        newPlayers[playerIdx].bingoCount = 0;
+
+        const updatedRoom = { ...roomData, players: newPlayers };
+        setRoomData(updatedRoom);
+        showToast(`${newPlayers[playerIdx].name} のボードを再シャッフルしました`);
+
+        if (db && roomCode && !isLocalMode) {
+          try {
+            const { doc, setDoc } = window.FirebaseSDK;
+            const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'spla3_bingo_rooms', roomCode);
+            await setDoc(roomDocRef, updatedRoom);
+          } catch (err) {}
+        }
+      };
+
+      // チェック全リセット
+      const handleResetPlayerChecks = async (playerIdx) => {
+        if (!roomData) return;
+        const size = roomData.settings.size;
+        const center = Math.floor(size / 2);
+        const effectiveFree = roomData.settings.freeCenter;
+
+        const newPlayers = JSON.parse(JSON.stringify(roomData.players));
+        const targetP = newPlayers[playerIdx];
+
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            if (effectiveFree && r === center && c === center) {
+              targetP.checked[r][c] = true;
+            } else {
+              targetP.checked[r][c] = false;
+            }
+          }
+        }
+        targetP.bingoCount = 0;
+
+        const updatedRoom = { ...roomData, players: newPlayers };
+        setRoomData(updatedRoom);
+        showToast(`${targetP.name} のチェックをリセットしました`);
+
+        if (db && roomCode && !isLocalMode) {
+          try {
+            const { doc, setDoc } = window.FirebaseSDK;
+            const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'spla3_bingo_rooms', roomCode);
+            await setDoc(roomDocRef, updatedRoom);
+          } catch (err) {}
+        }
+      };
+
+      // ビンゴ・リーチライン判定
+      const evaluateBoard = (checked, boardSize) => {
+        let bingoCount = 0;
+        let reachCount = 0;
+        const bingoCells = new Set();
+
+        const lines = [];
+
+        // 横ライン
+        for (let r = 0; r < boardSize; r++) {
+          const coords = [];
+          for (let c = 0; c < boardSize; c++) coords.push([r, c]);
+          lines.push(coords);
+        }
+        // 縦ライン
+        for (let c = 0; c < boardSize; c++) {
+          const coords = [];
+          for (let r = 0; r < boardSize; r++) coords.push([r, c]);
+          lines.push(coords);
+        }
+        // 斜め ↘
+        const diag1 = [];
+        for (let i = 0; i < boardSize; i++) diag1.push([i, i]);
+        lines.push(diag1);
+
+        // 斜め ↙
+        const diag2 = [];
+        for (let i = 0; i < boardSize; i++) diag2.push([i, boardSize - 1 - i]);
+        lines.push(diag2);
+
+        for (const line of lines) {
+          const count = line.filter(([r, c]) => checked[r][c]).length;
+          if (count === boardSize) {
+            bingoCount++;
+            line.forEach(([r, c]) => bingoCells.add(`${r}_${c}`));
+          } else if (count === boardSize - 1) {
+            reachCount++;
+          }
+        }
+
+        return { bingoCount, reachCount, bingoCells };
+      };
+
+      // 武器カテゴリのチェックボックス一括切替
+      const toggleCategory = (catId) => {
+        if (selectedCats.includes(catId)) {
+          if (selectedCats.length > 1) {
+            setSelectedCats(selectedCats.filter(c => c !== catId));
+          } else {
+            showToast('少なくとも1つの武器種を選択してください');
+          }
+        } else {
+          setSelectedCats([...selectedCats, catId]);
+        }
+      };
+
+      // ルームURL共有コピー
+      const handleCopyShareLink = () => {
+        const shareUrl = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+        copyToClipboard(shareUrl).then(() => {
+          showToast('共有リンクをクリップボードにコピーしました！Discordに貼れます');
+        });
+      };
+
+      // 画面判定
+      const activePlayer = roomData?.players[activePlayerIndex];
+      const evaluation = useMemo(() => {
+        if (!activePlayer || !roomData) return { bingoCount: 0, reachCount: 0, bingoCells: new Set() };
+        return evaluateBoard(activePlayer.checked, roomData.settings.size);
+      }, [activePlayer, roomData]);
+
+      return (
+        <div className="max-w-5xl mx-auto w-full px-3 py-4 flex-1 flex flex-col">
+          {/* ヘッダー */}
+          <header className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-5 border-b border-splatBorder pb-4">
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setRoomCode('')}>
+              <div className="bg-splatYellow text-splatDark font-black p-2 rounded-lg text-2xl rotate-[-3deg] shadow-[3px_3px_0px_#603BFF]">
+                🦑
+              </div>
+              <div>
+                <h1 className="text-2xl font-extrabold tracking-wider bg-gradient-to-r from-splatYellow via-splatCyan to-splatPink bg-clip-text text-transparent">
+                  スプラ3 武器ビンゴ
+                </h1>
+                <p className="text-xs text-gray-400 font-medium">リアルタイム共有対戦 / 協力対戦ツ―ル</p>
+              </div>
+            </div>
+
+            {/* ルームコード表示 & コピー */}
+            {roomCode && (
+              <div className="flex items-center gap-2 bg-splatCard border border-splatBorder rounded-xl p-2 px-3">
+                <span className="text-xs text-gray-400">ROOM:</span>
+                <span className="text-lg font-black tracking-widest text-splatYellow">{roomCode}</span>
+                <button
+                  onClick={handleCopyShareLink}
+                  className="bg-splatPurple hover:bg-opacity-80 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition active:scale-95"
+                >
+                  <i className="fa-solid fa-copy"></i>
+                  共有リンクコピー
+                </button>
+                <button
+                  onClick={() => { setRoomCode(''); setRoomData(null); }}
+                  className="text-gray-400 hover:text-red-400 text-xs px-2 py-1"
+                  title="ルームを離れる"
+                >
+                  <i className="fa-solid fa-right-from-bracket"></i>
+                </button>
+              </div>
+            )}
+          </header>
+
+          {/* トースト通知 */}
+          {notification && (
+            <div className="fixed top-5 right-5 z-50 bg-splatPink text-white font-bold px-4 py-3 rounded-xl shadow-2xl border-2 border-white animate-bounce flex items-center gap-2">
+              <i className="fa-solid fa-circle-info"></i>
+              {notification}
+            </div>
+          )}
+
+          {/* ルーム未参加時：ルーム作成/参加画面 */}
+          {!roomCode || !roomData ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-auto">
+              {/* ルーム作成パネル */}
+              <div className="bg-splatCard border border-splatBorder rounded-2xl p-5 sm:p-6 shadow-xl flex flex-col justify-between">
+                <div>
+                  <h2 className="text-xl font-black text-splatYellow flex items-center gap-2 mb-4">
+                    <i className="fa-solid fa-[#EAFF3D] fa-plus-circle"></i>
+                    新しいルームを作成
+                  </h2>
+
+                  {/* 設定：マス目 */}
+                  <div className="mb-4">
+                    <label className="text-xs font-bold text-gray-300 block mb-1">マス目サイズ</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[3, 4, 5].map(s => (
+                        <button
+                          key={s}
+                          onClick={() => setSize(s)}
+                          className={`py-2 rounded-lg font-bold text-sm border transition ${
+                            size === s
+                              ? 'bg-splatYellow text-splatDark border-splatYellow font-black shadow-[0_0_10px_rgba(234,255,61,0.4)]'
+                              : 'bg-splatDark border-splatBorder text-gray-400 hover:border-gray-500'
+                          }`}
+                        >
+                          {s} × {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 設定：人数 */}
+                  <div className="mb-4">
+                    <label className="text-xs font-bold text-gray-300 block mb-1">参加人数（1人＝共有 / 2〜8人＝対戦）</label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min="1"
+                        max="8"
+                        value={playerCount}
+                        onChange={(e) => setPlayerCount(Number(e.target.value))}
+                        className="w-full accent-splatPink cursor-pointer h-2 bg-splatDark rounded-lg"
+                      />
+                      <span className="text-lg font-black text-splatPink min-w-[3.5rem] text-right">
+                        {playerCount} 人
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 設定：FREE＆重複 */}
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    <label className="flex items-center gap-2 bg-splatDark p-2.5 rounded-lg border border-splatBorder cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={freeCenter}
+                        onChange={(e) => setFreeCenter(e.target.checked)}
+                        className="accent-splatCyan w-4 h-4 rounded"
+                      />
+                      <span className="text-xs font-bold text-gray-300">中央FREEマス</span>
+                    </label>
+                    <label className="flex items-center gap-2 bg-splatDark p-2.5 rounded-lg border border-splatBorder cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={allowDuplicate}
+                        onChange={(e) => setAllowDuplicate(e.target.checked)}
+                        className="accent-splatCyan w-4 h-4 rounded"
+                      />
+                      <span className="text-xs font-bold text-gray-300">他プレイヤーと被り許可</span>
+                    </label>
+                  </div>
+
+                  {/* 武器種フィルター */}
+                  <div className="mb-4">
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-xs font-bold text-gray-300">登場する武器種</label>
+                      <button
+                        onClick={() => setSelectedCats(WEAPON_CATEGORIES.map(c => c.id))}
+                        className="text-[10px] text-splatCyan hover:underline"
+                      >
+                        全選択
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1 bg-splatDark rounded-lg border border-splatBorder">
+                      {WEAPON_CATEGORIES.map(cat => {
+                        const active = selectedCats.includes(cat.id);
+                        return (
+                          <button
+                            key={cat.id}
+                            onClick={() => toggleCategory(cat.id)}
+                            className={`text-xs font-bold px-2 py-1 rounded transition border ${
+                              active
+                                ? 'border-transparent text-splatDark font-black'
+                                : 'bg-transparent border-splatBorder text-gray-500'
+                            }`}
+                            style={{ backgroundColor: active ? cat.color : undefined }}
+                          >
+                            {cat.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleCreateRoom}
+                  className="w-full bg-gradient-to-r from-splatYellow to-splatOrange text-splatDark font-black text-lg py-3 rounded-xl shadow-[0_4px_15px_rgba(234,255,61,0.3)] hover:brightness-110 active:scale-[0.98] transition mt-2"
+                >
+                  ビンゴルームを作成する 🚀
+                </button>
+              </div>
+
+              {/* ルーム参加パネル */}
+              <div className="bg-splatCard border border-splatBorder rounded-2xl p-5 sm:p-6 shadow-xl flex flex-col justify-between">
+                <div>
+                  <h2 className="text-xl font-black text-splatCyan flex items-center gap-2 mb-4">
+                    <i className="fa-solid fa-right-to-bracket"></i>
+                    作成済みのルームに参加
+                  </h2>
+
+                  <p className="text-xs text-gray-400 mb-6">
+                    Discord等で共有された6桁のルームコードを入力して、進行中のビンゴに参加できます。
+                  </p>
+
+                  <div className="mb-6">
+                    <label className="text-xs font-bold text-gray-300 block mb-2">ルームコード（6桁）</label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      placeholder="例: AB12CD"
+                      value={inputRoomCode}
+                      onChange={(e) => setInputRoomCode(e.target.value.toUpperCase())}
+                      className="w-full bg-splatDark border-2 border-splatBorder focus:border-splatCyan text-splatYellow text-center font-black text-3xl tracking-widest py-3 rounded-xl uppercase outline-none transition"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleJoinRoom}
+                  className="w-full bg-splatCyan hover:bg-opacity-90 text-splatDark font-black text-lg py-3 rounded-xl shadow-[0_4px_15px_rgba(0,240,255,0.3)] active:scale-[0.98] transition"
+                >
+                  ルームに参加する 🎮
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* ビンゴボードメイン画面 */
+            <div className="flex flex-col gap-4">
+
+              {/* プレイヤー選択タブ (複数人時) */}
+              {roomData.settings.playerCount > 1 && (
+                <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-splatBorder">
+                  {roomData.players.map((p, idx) => {
+                    const isCurrent = idx === activePlayerIndex;
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => setActivePlayerIndex(idx)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-black whitespace-nowrap transition border ${
+                          isCurrent
+                            ? 'bg-splatPurple text-white border-splatPink shadow-[0_0_10px_rgba(96,59,255,0.5)]'
+                            : 'bg-splatCard text-gray-400 border-splatBorder hover:border-gray-500'
+                        }`}
+                      >
+                        <span>{p.name}</span>
+                        {p.bingoCount > 0 && (
+                          <span className="bg-splatYellow text-splatDark px-1.5 py-0.5 rounded-full text-[10px] font-black">
+                            {p.bingoCount} BINGO
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* プレイヤー情報＆スコアヘッダー */}
+              {activePlayer && (
+                <div className="bg-splatCard border border-splatBorder rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                  {/* プレイヤー名インライン編集 */}
+                  <div className="flex items-center gap-2 w-full md:w-auto">
+                    <i className="fa-solid fa-user-ninja text-splatPink text-lg"></i>
+                    <input
+                      type="text"
+                      value={activePlayer.name}
+                      onChange={(e) => handleNameChange(activePlayerIndex, e.target.value)}
+                      className="bg-splatDark border border-splatBorder text-white font-black text-lg px-2 py-1 rounded-lg focus:border-splatCyan outline-none max-w-[180px]"
+                    />
+                    <span className="text-xs text-gray-400 font-medium">(編集可)</span>
+                  </div>
+
+                  {/* スコアバッジカウンター */}
+                  <div className="flex items-center gap-3 w-full md:w-auto justify-around">
+                    <div className="text-center bg-splatDark px-4 py-1.5 rounded-xl border border-splatBorder min-w-[70px]">
+                      <div className="text-[10px] text-gray-400 font-bold">ACHIEVED</div>
+                      <div className="text-lg font-black text-white">
+                        {activePlayer.checked.flat().filter(Boolean).length} / {roomData.settings.size * roomData.settings.size}
+                      </div>
+                    </div>
+
+                    <div className="text-center bg-splatDark px-4 py-1.5 rounded-xl border border-splatBorder min-w-[70px]">
+                      <div className="text-[10px] text-gray-400 font-bold">REACH</div>
+                      <div className="text-lg font-black text-splatCyan">
+                        {evaluation.reachCount}
+                      </div>
+                    </div>
+
+                    <div className="text-center bg-splatDark px-4 py-1.5 rounded-xl border border-splatBorder min-w-[70px] relative overflow-hidden">
+                      <div className="text-[10px] text-gray-400 font-bold">BINGO</div>
+                      <div className="text-2xl font-black text-splatYellow">
+                        {evaluation.bingoCount}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ビンゴボード本体 */}
+              {activePlayer && (
+                <div className="bg-splatCard border border-splatBorder rounded-2xl p-3 sm:p-5 shadow-2xl">
+                  <div
+                    className="grid gap-2 sm:gap-3 w-full"
+                    style={{
+                      gridTemplateColumns: `repeat(${roomData.settings.size}, minmax(0, 1fr))`
+                    }}
+                  >
+                    {activePlayer.grid.map((row, r) =>
+                      row.map((cell, c) => {
+                        const isChecked = activePlayer.checked[r][c];
+                        const isBingoLine = evaluation.bingoCells.has(`${r}_${c}`);
+                        const isFree = cell.cat === 'free';
+                        const catInfo = WEAPON_CATEGORIES.find(cat => cat.id === cell.cat);
+
+                        return (
+                          <div
+                            key={`${r}_${c}`}
+                            onClick={() => handleCellClick(activePlayerIndex, r, c)}
+                            className={`relative aspect-square rounded-xl p-1.5 sm:p-2 flex flex-col justify-between items-center text-center cursor-pointer transition-all duration-150 select-none border-2 overflow-hidden ${
+                              isBingoLine ? 'glow-bingo-line' : ''
+                            } ${
+                              isChecked
+                                ? 'bg-gradient-to-br from-splatPurple to-splatDark border-splatPink text-white animate-ink shadow-[inset_0_0_10px_rgba(255,46,136,0.5)]'
+                                : 'bg-splatDark border-splatBorder hover:border-gray-500 text-gray-200 hover:bg-opacity-80'
+                            }`}
+                          >
+                            {/* チェック背景アイコン演出 */}
+                            {isChecked && !isFree && (
+                              <div className="absolute inset-0 flex items-center justify-center opacity-20 text-splatPink text-4xl sm:text-6xl pointer-events-none">
+                                <i className="fa-solid fa-check"></i>
+                              </div>
+                            )}
+
+                            {/* 上部：武器種タグ / FREEタグ */}
+                            <div className="w-full flex justify-between items-center text-[9px] sm:text-[11px]">
+                              {isFree ? (
+                                <span className="bg-splatYellow text-splatDark font-black px-1.5 py-0.5 rounded text-[10px] w-full text-center">
+                                  FREE
+                                </span>
+                              ) : (
+                                <span
+                                  className="font-black px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] truncate max-w-full"
+                                  style={{
+                                    backgroundColor: isChecked ? '#FF2E88' : (catInfo?.color || '#603BFF'),
+                                    color: '#12131A'
+                                  }}
+                                >
+                                  {catInfo?.name || '武器'}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* メイン：武器名 */}
+                            <div className="my-auto font-black text-xs sm:text-sm md:text-base leading-tight break-words w-full z-10 px-0.5">
+                              {cell.name}
+                            </div>
+
+                            {/* 下部：状態アイコン */}
+                            <div className="w-full flex justify-end">
+                              {isChecked ? (
+                                <span className="text-splatYellow text-xs sm:text-sm">
+                                  <i className="fa-solid fa-circle-check"></i>
+                                </span>
+                              ) : (
+                                <span className="text-gray-600 text-[10px]">
+                                  <i className="fa-regular fa-square"></i>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 下部コントロールボタン */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-splatCard border border-splatBorder rounded-2xl p-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleResetPlayerChecks(activePlayerIndex)}
+                    className="bg-splatDark hover:bg-red-950/40 text-red-400 border border-red-900/50 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition"
+                  >
+                    <i className="fa-solid fa-rotate-left"></i>
+                    チェック全解除
+                  </button>
+                  <button
+                    onClick={() => handleReshufflePlayer(activePlayerIndex)}
+                    className="bg-splatDark hover:bg-splatBorder text-splatCyan border border-splatBorder text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition"
+                  >
+                    <i className="fa-solid fa-shuffle"></i>
+                    武器再シャッフル
+                  </button>
+                </div>
+
+                <div className="text-xs text-gray-400 font-medium">
+                  {isLocalMode ? '🌐 オフライン / シングルモード' : '⚡ リアルタイム同期中'}
+                </div>
+              </div>
+
+              {/* 全プレイヤーの進捗一覧（マルチプレイヤー時） */}
+              {roomData.settings.playerCount > 1 && (
+                <div className="bg-splatCard border border-splatBorder rounded-2xl p-4 mt-2">
+                  <h3 className="text-sm font-black text-splatYellow mb-3 flex items-center gap-2">
+                    <i className="fa-solid fa-trophy"></i>
+                    全員の達成状況一覧
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                    {roomData.players.map((p, idx) => {
+                      const pEval = evaluateBoard(p.checked, roomData.settings.size);
+                      const totalChecked = p.checked.flat().filter(Boolean).length;
+                      const totalCells = roomData.settings.size * roomData.settings.size;
+                      const progressPct = Math.round((totalChecked / totalCells) * 100);
+
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => setActivePlayerIndex(idx)}
+                          className={`p-3 rounded-xl border cursor-pointer transition ${
+                            idx === activePlayerIndex
+                              ? 'bg-splatDark border-splatPink'
+                              : 'bg-splatDark/50 border-splatBorder hover:border-gray-600'
+                          }`}
+                        >
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-bold text-xs text-white truncate max-w-[100px]">{p.name}</span>
+                            <span className="text-xs font-black text-splatYellow">{pEval.bingoCount} BINGO</span>
+                          </div>
+                          {/* プログレスバー */}
+                          <div className="w-full bg-splatCard h-2 rounded-full overflow-hidden mb-1">
+                            <div
+                              className="bg-gradient-to-r from-splatCyan to-splatPink h-full transition-all duration-300"
+                              style={{ width: `${progressPct}%` }}
+                            ></div>
+                          </div>
+                          <div className="flex justify-between text-[10px] text-gray-400 font-semibold">
+                            <span>マス: {totalChecked}/{totalCells}</span>
+                            <span>リーチ: {pEval.reachCount}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+            </div>
+          )}
+
+          {/* フッター */}
+          <footer className="mt-8 text-center text-xs text-gray-500 py-3 border-t border-splatBorder">
+            <p>Splatoon 3 Random Weapon Bingo App - Realtime Sync Edition</p>
+          </footer>
+        </div>
+      );
+    }
+
+    // Reactアプリのレタリング
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
