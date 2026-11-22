@@ -286,7 +286,15 @@
 
             let firebaseConfig = null;
             if (typeof __firebase_config !== 'undefined') {
-              firebaseConfig = JSON.parse(__firebase_config);
+              const firebaseConfig = {
+  apiKey: "AIzaSyAuh7Zpu8598l4AOsz0pcbQ-VijdmObPhE",
+  authDomain: "spla3-bingo.firebaseapp.com",
+  projectId: "spla3-bingo",
+  storageBucket: "spla3-bingo.firebasestorage.app",
+  messagingSenderId: "914550051879",
+  appId: "1:914550051879:web:be9573d615de1d1c2faa02",
+  measurementId: "G-CY07W70WD9"
+};
             }
 
             if (!firebaseConfig) {
